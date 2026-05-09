@@ -17,18 +17,18 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Build Assets
+      - name: Build Web Assets
         run: |
           mkdir -p www
           cp index.html style.css script.js www/ || true
           
       - name: Capacitor Setup
         run: |
-          # 必须安装这个插件包才能解决报错
-          npm install @capawesome/capacitor-file-picker @capacitor/filesystem --force
+          # 显式安装已知稳定的多选插件
+          npm install @capawesome/capacitor-file-picker @capacitor/filesystem @capacitor/core @capacitor/android --force
           npx cap add android
           
-          # MainActivity 注入：解决黑屏和底层访问权限
+          # MainActivity 注入 (复刻成功版本的 WebSettings)
           python3 -c "
           import os
           path = 'android/app/src/main/java/com/mytiktok/app/MainActivity.java'
@@ -42,14 +42,13 @@ jobs:
                   WebSettings settings = this.bridge.getWebView().getSettings();
                   settings.setAllowFileAccess(true);
                   settings.setAllowContentAccess(true);
-                  settings.setMediaPlaybackRequiresUserGesture(false);
               }
           '''
           content = content.replace('public class MainActivity extends BridgeActivity {}', 'public class MainActivity extends BridgeActivity {' + logic + '}')
           with open(path, 'w') as f: f.write(content)
           "
 
-          # Manifest 注入
+          # 权限注入
           python3 -c "
           import os
           p = 'android/app/src/main/AndroidManifest.xml'
@@ -69,5 +68,5 @@ jobs:
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: TikTok-Final-Fixed
+          name: TikTok-Fixed-Picker
           path: android/app/build/outputs/apk/debug/app-debug.apk
