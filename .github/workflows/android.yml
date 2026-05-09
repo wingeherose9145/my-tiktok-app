@@ -1,31 +1,29 @@
 name: Build Android APK
-
-on: [push] # 只要你修改代码，GitHub 就会自动开始打包
+on: [push, workflow_dispatch]
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - name: 检出代码
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4  # 升级到 v4
 
-      - name: 设置 Node.js
-        uses: actions/setup-node@v3
+      - name: 设置 Java 环境
+        uses: actions/setup-java@v4  # 升级到 v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: 安装 Node.js
+        uses: actions/setup-node@v4  # 升级到 v4
         with:
           node-version: 18
 
-      - name: 安装依赖
-        run: npm install
-
-      - name: 设置 Java 环境
-        uses: actions/setup-java@v3
-        with:
-          distribution: 'zulu'
-          java-version: '17'
-
-      - name: 初始化 Android 项目
+      - name: 安装依赖并初始化
         run: |
-          npx cap add android
+          npm install
+          npm install @capacitor/cli @capacitor/core @capacitor/android
+          npx cap add android || true
           npx cap copy
 
       - name: 打包 APK
@@ -34,7 +32,7 @@ jobs:
           ./gradlew assembleDebug
 
       - name: 上传 APK 产物
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4  # 必须是 v4
         with:
           name: my-tiktok-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
