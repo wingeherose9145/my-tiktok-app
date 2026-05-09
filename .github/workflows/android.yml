@@ -4,6 +4,8 @@ on: [push, workflow_dispatch]
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
@@ -17,23 +19,29 @@ jobs:
       - name: 安装 Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
 
-      - name: 安装 Capacitor 核心工具
+      - name: 准备环境与网页文件
         run: |
+          # 安装核心工具
           npm install @capacitor/cli @capacitor/core @capacitor/android
+          # 必须创建 www 目录并放入网页文件，否则同步会失败
+          mkdir -p www
+          cp index.html style.css script.js *.mp4 www/ || true
 
-      - name: 初始化并创建安卓工程
+      - name: 彻底初始化安卓项目
         run: |
-          # 如果没有 android 文件夹就创建一个
+          # 1. 如果没有 android 文件夹就新建
           npx cap add android || true
-          # 把网页代码同步进去
-          npx cap copy
+          # 2. 【关键】强制同步并生成那些缺失的 .gradle 文件
+          npx cap sync android
 
-      - name: 打包 APK
+      - name: 授予权限并执行打包
         run: |
           cd android
+          # 确保脚本有执行权限
           chmod +x gradlew
+          # 开始正式编译 APK
           ./gradlew assembleDebug
 
       - name: 上传 APK 产物
