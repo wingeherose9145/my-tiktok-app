@@ -6,9 +6,6 @@
   "server": {
     "allowNavigation": ["*"],
     "cleartext": true,
-    "androidScheme": "https"
-  },
-  "android": {
-    "allowMixedContent": true
+    "androidScheme": "http"
   }
 }
