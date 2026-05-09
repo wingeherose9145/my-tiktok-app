@@ -2,7 +2,6 @@ const container = document.getElementById('videoContainer');
 const addBtn = document.getElementById('add-btn');
 let db;
 
-// 初始化数据库
 const request = indexedDB.open("VideoPathDB", 1);
 request.onupgradeneeded = (e) => {
     db = e.target.result;
@@ -31,10 +30,8 @@ function renderVideo(nativePath) {
     observer.observe(card);
 }
 
-// 唤起拾取器
 async function pickVideos() {
     try {
-        if (!window.Capacitor) throw new Error("环境非App");
         const { FilePicker } = window.Capacitor.Plugins;
         const result = await FilePicker.pickVideos({ multiple: true, readData: false });
         if (result.files && result.files.length > 0) {
@@ -45,11 +42,13 @@ async function pickVideos() {
             });
             addBtn.classList.add('hidden');
         }
-    } catch (err) { alert("点击屏幕重试: " + err.message); }
+    } catch (err) {
+        alert("请确保已授予存储权限！");
+    }
 }
 
 addBtn.onclick = (e) => { e.stopPropagation(); pickVideos(); };
-container.onclick = () => { addBtn.classList.toggle('hidden'); };
+container.onclick = () => addBtn.classList.toggle('hidden');
 
 const observer = new IntersectionObserver((entries) => {
     entries.forEach(entry => {
