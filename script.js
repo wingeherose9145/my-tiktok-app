@@ -2,8 +2,7 @@ const container = document.getElementById('videoContainer');
 const addBtn = document.getElementById('add-btn');
 let db;
 
-// 初始化数据库
-const request = indexedDB.open("VideoPathDB", 35); 
+const request = indexedDB.open("VideoPathDB", 40); 
 request.onupgradeneeded = (e) => {
     db = e.target.result;
     if (!db.objectStoreNames.contains("paths")) db.createObjectStore("paths", { autoIncrement: true });
@@ -28,36 +27,41 @@ function renderVideo(path) {
     const videoUrl = window.Capacitor.convertFileSrc(path);
     const card = document.createElement('div');
     card.className = 'video-card';
-    card.innerHTML = `<video src="${videoUrl}" loop playsinline webkit-playsinline preload="auto"></video>`;
+    card.innerHTML = `<video src="${videoUrl}" loop playsinline webkit-playsinline></video>`;
     container.appendChild(card);
     observer.observe(card);
 }
 
-// 核心：解决多选 + 解决报错 + 物理搬家
 async function pickMultiVideos() {
     try {
         const { FilePicker, Filesystem } = window.Capacitor.Plugins;
 
+        // 容错处理：检查插件是否存在
         if (!FilePicker) {
-            alert("未检测到选择插件，请确保 workflow 中安装了该插件");
+            alert("错误：FilePicker 插件未就绪");
             return;
         }
 
-        // 调用选择器
-        const result = await FilePicker.pickFiles({
+        // 兼容性处理：尝试 pickFiles 或 pick
+        const pickFunc = FilePicker.pickFiles || FilePicker.pick;
+        if (typeof pickFunc !== 'function') {
+            alert("错误：当前插件版本不支持选择功能，请检查构建配置");
+            return;
+        }
+
+        const result = await pickFunc({
             types: ['video/*'],
-            multiple: true, // 开启批量多选
+            multiple: true, // 开启多选
             readData: false
         });
 
         if (result && result.files && result.files.length > 0) {
-            alert(`已选中 ${result.files.length} 个视频，正在处理...`);
             const transaction = db.transaction(["paths"], "readwrite");
             const store = transaction.objectStore("paths");
 
             for (const file of result.files) {
                 try {
-                    // 执行搬家，确保重启能播
+                    // 执行物理复制（搬家）
                     const fileName = `v_${Date.now()}_${file.name}`;
                     const copyResult = await Filesystem.copy({
                         from: file.path,
@@ -66,14 +70,12 @@ async function pickMultiVideos() {
                     });
                     store.add(copyResult.uri);
                     renderVideo(copyResult.uri);
-                } catch (e) {
-                    console.error("文件复制失败:", e);
-                }
+                } catch (e) { console.error("处理失败", e); }
             }
             addBtn.classList.add('hidden');
         }
     } catch (err) {
-        console.log("用户取消或插件错误:", err);
+        alert("操作异常: " + err.message);
     }
 }
 
