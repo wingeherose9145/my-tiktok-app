@@ -2,7 +2,7 @@ const container = document.getElementById('videoContainer');
 const addBtn = document.getElementById('add-btn');
 let db;
 
-// 1. 初始化数据库：这次我们只存路径字符串 (Path)
+// 1. 初始化数据库：只存路径字符串
 const request = indexedDB.open("VideoPathDB", 1);
 request.onupgradeneeded = (e) => {
     db = e.target.result;
@@ -10,9 +10,13 @@ request.onupgradeneeded = (e) => {
         db.createObjectStore("paths", { autoIncrement: true });
     }
 };
-request.onsuccess = (e) => {
+request.onsuccess = async (e) => {
     db = e.target.result;
     loadSavedPaths();
+    // 启动时尝试唤醒原生权限
+    if (window.Capacitor && window.Capacitor.Plugins.FilePicker) {
+        await window.Capacitor.Plugins.FilePicker.requestPermissions();
+    }
 };
 
 // 2. 加载已保存的路径
@@ -28,11 +32,9 @@ function loadSavedPaths() {
     };
 }
 
-// 3. 渲染视频：使用 Capacitor.convertFileSrc 实现零占用播放
+// 3. 渲染视频：零占用播放
 function renderVideo(nativePath) {
-    // 核心：把手机原生路径 (file://...) 转换为网页能播的虚拟 URL
     const videoUrl = window.Capacitor ? window.Capacitor.convertFileSrc(nativePath) : nativePath;
-    
     const card = document.createElement('div');
     card.className = 'video-card';
     card.innerHTML = `<video src="${videoUrl}" loop playsinline></video>`;
@@ -40,37 +42,38 @@ function renderVideo(nativePath) {
     observer.observe(card);
 }
 
-// 4. 选择视频：获取真实路径
+// 4. 单击添加：调用原生拾取器
 addBtn.onclick = async () => {
-    // 动态检查是否在 App 环境
-    if (!window.Capacitor) {
-        alert("请在安卓 App 内运行以使用路径模式");
+    if (!window.Capacitor || !window.Capacitor.Plugins.FilePicker) {
+        alert("环境未就绪，请在打包后的 App 内使用");
         return;
     }
 
     try {
-        // 调用原生拾取器
-        const { FilePicker } = await import('@capawesome/capacitor-file-picker');
-        const result = await FilePicker.pickVideos({ multiple: true, readData: false });
+        const { FilePicker } = window.Capacitor.Plugins;
+        const result = await FilePicker.pickVideos({
+            multiple: true,
+            readData: false // 不读取数据到内存，只拿路径
+        });
 
-        if (result.files.length > 0) {
+        if (result.files && result.files.length > 0) {
             const transaction = db.transaction(["paths"], "readwrite");
             const store = transaction.objectStore("paths");
             
             result.files.forEach(file => {
                 if (file.path) {
-                    store.add(file.path); // 只存一串文字路径，零空间占用！
+                    store.add(file.path);
                     renderVideo(file.path);
                 }
             });
             addBtn.classList.add('hidden');
         }
     } catch (err) {
-        console.error("选取取消或失败", err);
+        console.error(err);
     }
 };
 
-// 5. 滚动与点击逻辑 (保持之前的完美交互)
+// 5. 交互逻辑
 const observer = new IntersectionObserver((entries) => {
     entries.forEach(entry => {
         const v = entry.target.querySelector('video');
