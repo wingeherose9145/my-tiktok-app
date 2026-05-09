@@ -4,39 +4,38 @@ on: [push, workflow_dispatch]
 jobs:
   build:
     runs-on: ubuntu-latest
-    # 核心修复：设置环境变量以启用 Node.js 24，消除警告
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
       
     steps:
-      - name: 检出代码
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: 设置 Java 环境
+      - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: 安装 Node.js
+      - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: '24'
+          node-version: '20' # 回退到20，因为24有时会让某些旧CLI报错
 
-      - name: 准备 www 目录
+      - name: Prepare Workspace
         run: |
-          # 确保 Capacitor 要求的 webDir 存在
+          # 彻底清理可能导致冲突的旧文件夹
+          rm -rf android www node_modules package-lock.json
           mkdir -p www
+          # 确保核心文件在 www 下
           cp index.html style.css script.js www/ || true
-          cp *.mp4 www/ || true
-
-      - name: 彻底初始化安卓项目
+          
+      - name: Install and Init
         run: |
-          npm install @capacitor/cli @capacitor/core @capacitor/android
-          rm -rf android
+          npm install --force @capacitor/cli @capacitor/core @capacitor/android
           npx cap add android
           
-          # 1. 注入全屏 Java 代码 (解决挖孔屏问题)
+          # 写入全屏代码
           mkdir -p android/app/src/main/java/com/mytiktok/app/
           cat <<EOF > android/app/src/main/java/com/mytiktok/app/MainActivity.java
           package com.mytiktok.app;
@@ -56,9 +55,7 @@ jobs:
                   if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                       window.clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS);
                       window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
-                      window.getDecorView().setSystemUiVisibility(
-                          View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-                      );
+                      window.getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN | View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
                       window.setStatusBarColor(Color.TRANSPARENT);
                   }
                   if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
@@ -70,18 +67,18 @@ jobs:
           }
           EOF
 
-          # 2. 注入视频读取权限 (Manifest 修复)
+          # 写入权限
           sed -i '/<\/manifest>/i \    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />\n    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />' android/app/src/main/AndroidManifest.xml
           
           npx cap sync android
 
-      - name: 执行打包
+      - name: Build APK
         run: |
           cd android
           chmod +x gradlew
           ./gradlew assembleDebug
 
-      - name: 上传 APK 产物
+      - name: Upload
         uses: actions/upload-artifact@v4
         with:
           name: my-tiktok-apk
