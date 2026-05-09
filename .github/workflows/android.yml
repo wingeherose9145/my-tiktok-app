@@ -17,7 +17,7 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Build Web
+      - name: Build Assets
         run: |
           mkdir -p www
           cp index.html style.css script.js www/ || true
@@ -27,7 +27,7 @@ jobs:
           npm install --force
           npx cap add android
           
-          # MainActivity.java：注入硬件加速
+          # MainActivity 注入：确保 WebView 权限强开（复刻第84次成功逻辑）
           python3 -c "
           import os
           path = 'android/app/src/main/java/com/mytiktok/app/MainActivity.java'
@@ -43,21 +43,24 @@ jobs:
                       getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN | View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
                       getWindow().setStatusBarColor(Color.TRANSPARENT);
                   }
+                  // 核心：强开 WebView 对搬家后文件的访问权
+                  try {
+                      this.bridge.getWebView().getSettings().setAllowFileAccess(true);
+                      this.bridge.getWebView().getSettings().setAllowContentAccess(true);
+                  } catch (Exception e) {}
               }
           '''
           content = content.replace('public class MainActivity extends BridgeActivity {}', 'public class MainActivity extends BridgeActivity {' + logic + '}')
           with open(path, 'w') as f: f.write(content)
           "
 
-          # AndroidManifest.xml：注入传统存储访问权限，这对于“不搬家直接读”至关重要
+          # Manifest 注入：确保存储权限
           python3 -c "
           import os
           p = 'android/app/src/main/AndroidManifest.xml'
           with open(p, 'r') as f: c = f.read()
-          # 注入权限
           perms = '\\n    <uses-permission android:name=\"android.permission.READ_EXTERNAL_STORAGE\" />\\n    <uses-permission android:name=\"android.permission.READ_MEDIA_VIDEO\" />\\n'
           c = c.replace('</manifest>', perms + '</manifest>')
-          # 开启 Legacy 模式，让 App 能直接访问外部路径
           if 'requestLegacyExternalStorage' not in c:
               c = c.replace('<application', '<application android:requestLegacyExternalStorage=\"true\"')
           with open(p, 'w') as f: f.write(c)
@@ -71,5 +74,5 @@ jobs:
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: TikTok-NoCopy-MultiSelect
+          name: TikTok-CheckFinal
           path: android/app/build/outputs/apk/debug/app-debug.apk
