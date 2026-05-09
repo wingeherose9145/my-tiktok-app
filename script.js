@@ -2,7 +2,7 @@ const container = document.getElementById('videoContainer');
 const addBtn = document.getElementById('add-btn');
 let db;
 
-// 1. 初始化数据库：只存路径字符串
+// 1. 初始化数据库
 const request = indexedDB.open("VideoPathDB", 1);
 request.onupgradeneeded = (e) => {
     db = e.target.result;
@@ -13,27 +13,24 @@ request.onupgradeneeded = (e) => {
 request.onsuccess = async (e) => {
     db = e.target.result;
     loadSavedPaths();
-    // 启动时尝试唤醒原生权限
-    if (window.Capacitor && window.Capacitor.Plugins.FilePicker) {
-        await window.Capacitor.Plugins.FilePicker.requestPermissions();
-    }
 };
 
-// 2. 加载已保存的路径
+// 2. 加载路径
 function loadSavedPaths() {
     const transaction = db.transaction(["paths"], "readonly");
     const store = transaction.objectStore("paths");
     store.getAll().onsuccess = (e) => {
         const paths = e.target.result;
-        if (paths.length > 0) {
+        if (paths && paths.length > 0) {
             addBtn.classList.add('hidden');
             paths.forEach(path => renderVideo(path));
         }
     };
 }
 
-// 3. 渲染视频：零占用播放
+// 3. 渲染视频 (零占用转换)
 function renderVideo(nativePath) {
+    // 关键：Capacitor 虚拟路径转换
     const videoUrl = window.Capacitor ? window.Capacitor.convertFileSrc(nativePath) : nativePath;
     const card = document.createElement('div');
     card.className = 'video-card';
@@ -42,18 +39,23 @@ function renderVideo(nativePath) {
     observer.observe(card);
 }
 
-// 4. 单击添加：调用原生拾取器
+// 4. 点击添加
 addBtn.onclick = async () => {
-    if (!window.Capacitor || !window.Capacitor.Plugins.FilePicker) {
-        alert("环境未就绪，请在打包后的 App 内使用");
+    if (!window.Capacitor) {
+        alert("请在打包后的 App 环境中运行");
         return;
     }
 
     try {
-        const { FilePicker } = window.Capacitor.Plugins;
+        // 使用 window.Capacitor.Plugins 访问已注册的插件
+        const FilePicker = window.Capacitor.Plugins.FilePicker;
+        
+        // 弹出权限申请
+        await FilePicker.requestPermissions();
+
         const result = await FilePicker.pickVideos({
             multiple: true,
-            readData: false // 不读取数据到内存，只拿路径
+            readData: false
         });
 
         if (result.files && result.files.length > 0) {
@@ -69,11 +71,11 @@ addBtn.onclick = async () => {
             addBtn.classList.add('hidden');
         }
     } catch (err) {
-        console.error(err);
+        alert("操作失败: " + err.message);
     }
 };
 
-// 5. 交互逻辑
+// 5. 播放控制逻辑 (保持完美交互)
 const observer = new IntersectionObserver((entries) => {
     entries.forEach(entry => {
         const v = entry.target.querySelector('video');
