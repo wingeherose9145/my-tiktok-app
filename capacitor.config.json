@@ -2,9 +2,13 @@
   "appId": "com.mytiktok.app",
   "appName": "my-tiktok-app",
   "webDir": "www",
+  "bundledWebRuntime": false,
   "server": {
     "allowNavigation": ["*"],
     "androidScheme": "http",
     "cleartext": true
+  },
+  "android": {
+    "allowMixedContent": true
   }
 }
