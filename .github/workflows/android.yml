@@ -4,44 +4,34 @@ on: [push, workflow_dispatch]
 jobs:
   build:
     runs-on: ubuntu-latest
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
-
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
-      - name: Prepare Assets
+      - name: Build Web Assets
         run: |
-          rm -rf www
           mkdir -p www
-          cp index.html style.css script.js www/ || true
-
-      - name: Install and Build Native
+          cp index.html style.css script.js www/
+          
+      - name: Capacitor Android Setup
         run: |
           npm install --force @capacitor/cli @capacitor/core @capacitor/android @capawesome/capacitor-file-picker
           npx cap add android
-
-          # 1. 注入 MainActivity.java (最稳健的写法)
+          
+          # 直接覆盖 MainActivity.java，防止追加错误 (关键修改)
           mkdir -p android/app/src/main/java/com/mytiktok/app/
           cat <<'EOF' > android/app/src/main/java/com/mytiktok/app/MainActivity.java
           package com.mytiktok.app;
           import android.os.Bundle;
-          import android.graphics.Color;
-          import android.os.Build;
-          import android.view.View;
-          import android.view.Window;
-          import android.view.WindowManager;
           import com.getcapacitor.BridgeActivity;
           import io.capawesome.capacitor.filepicker.FilePickerPlugin;
 
@@ -50,37 +40,29 @@ jobs:
               protected void onCreate(Bundle savedInstanceState) {
                   registerPlugin(FilePickerPlugin.class);
                   super.onCreate(savedInstanceState);
-                  
-                  Window window = getWindow();
-                  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                      window.clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS);
-                      window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
-                      window.getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN | View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
-                      window.setStatusBarColor(Color.TRANSPARENT);
-                  }
-                  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                      WindowManager.LayoutParams lp = window.getAttributes();
-                      lp.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
-                      window.setAttributes(lp);
-                  }
               }
           }
           EOF
 
-          # 2. 注入权限 (使用最原始的 append 方式，防止匹配失败)
-          # 在 </manifest> 前面插入权限声明
-          sed -i '/<\/manifest>/i \    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />\n    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />' android/app/src/main/AndroidManifest.xml
+          # 使用更安全的 python 脚本修改清单文件，避开 sed 的坑
+          python3 -c "
+          import os
+          path = 'android/app/src/main/AndroidManifest.xml'
+          with open(path, 'r') as f: content = f.read()
+          perms = '\n    <uses-permission android:name=\"android.permission.READ_EXTERNAL_STORAGE\" />\n    <uses-permission android:name=\"android.permission.READ_MEDIA_VIDEO\" />\n'
+          content = content.replace('</manifest>', perms + '</manifest>')
+          with open(path, 'w') as f: f.write(content)
+          "
           
           npx cap sync android
 
-      - name: Build APK
+      - name: Build Debug APK
         run: |
-          cd android
-          chmod +x gradlew
+          cd android && chmod +x gradlew
           ./gradlew assembleDebug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: my-tiktok-zero-apk
+          name: tiktok-fix-build
           path: android/app/build/outputs/apk/debug/app-debug.apk
