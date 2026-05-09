@@ -21,27 +21,24 @@ jobs:
         with:
           node-version: 24
 
-      - name: 准备环境与网页文件
+      - name: 准备 www 目录
         run: |
-          # 安装核心工具
-          npm install @capacitor/cli @capacitor/core @capacitor/android
-          # 必须创建 www 目录并放入网页文件，否则同步会失败
+          # 核心修复：创建 www 文件夹并把所有网页资源搬进去
           mkdir -p www
           cp index.html style.css script.js *.mp4 www/ || true
+          # 安装打包工具
+          npm install @capacitor/cli @capacitor/core @capacitor/android
 
       - name: 彻底初始化安卓项目
         run: |
-          # 1. 如果没有 android 文件夹就新建
           npx cap add android || true
-          # 2. 【关键】强制同步并生成那些缺失的 .gradle 文件
+          # 这一步现在会将 www 文件夹同步到安卓工程
           npx cap sync android
 
       - name: 授予权限并执行打包
         run: |
           cd android
-          # 确保脚本有执行权限
           chmod +x gradlew
-          # 开始正式编译 APK
           ./gradlew assembleDebug
 
       - name: 上传 APK 产物
