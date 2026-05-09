@@ -1,0 +1,6 @@
+{
+  "appId": "com.mytiktok.app",
+  "appName": "MyTikTok",
+  "webDir": ".",
+  "bundledWebRuntime": false
+}
