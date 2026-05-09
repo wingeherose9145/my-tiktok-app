@@ -1,95 +1,87 @@
 const container = document.getElementById('videoContainer');
 const addBtn = document.getElementById('add-btn');
-
 let db;
 
-// 1. 初始化数据库 (IndexedDB) - 核心：记住选过的视频
-const request = indexedDB.open("VideoLibrary", 1);
+const request = indexedDB.open("VideoPathDB", 1);
 request.onupgradeneeded = (e) => {
     db = e.target.result;
-    db.createObjectStore("videos", { autoIncrement: true });
+    if (!db.objectStoreNames.contains("paths")) {
+        db.createObjectStore("paths", { autoIncrement: true });
+    }
 };
 request.onsuccess = (e) => {
     db = e.target.result;
-    loadSavedVideos(); // 启动时自动加载
+    loadSavedPaths();
 };
 
-// 2. 加载已保存的视频
-function loadSavedVideos() {
-    const transaction = db.transaction(["videos"], "readonly");
-    const store = transaction.objectStore("videos");
-    const getAll = store.getAll();
-
-    getAll.onsuccess = () => {
-        const files = getAll.result;
-        if (files.length > 0) {
-            addBtn.classList.add('hidden'); // 有视频就隐藏按钮
-            files.forEach(file => renderVideo(file));
+function loadSavedPaths() {
+    const transaction = db.transaction(["paths"], "readonly");
+    const store = transaction.objectStore("paths");
+    store.getAll().onsuccess = (e) => {
+        const paths = e.target.result;
+        if (paths && paths.length > 0) {
+            addBtn.classList.add('hidden');
+            paths.forEach(path => renderVideo(path));
         }
     };
 }
 
-// 3. 渲染视频
-function renderVideo(file) {
-    const url = URL.createObjectURL(file);
+function renderVideo(nativePath) {
+    const videoUrl = window.Capacitor ? window.Capacitor.convertFileSrc(nativePath) : nativePath;
     const card = document.createElement('div');
     card.className = 'video-card';
-    card.innerHTML = `<video src="${url}" loop playsinline></video>`;
+    // 关键：增加 preload="auto"
+    card.innerHTML = `<video src="${videoUrl}" loop playsinline webkit-playsinline preload="auto"></video>`;
     container.appendChild(card);
+    
+    const v = card.querySelector('video');
+    v.load(); // 强制重新加载路径
     observer.observe(card);
 }
 
-// 4. 选择视频并保存
-const fileInput = document.createElement('input');
-fileInput.type = 'file';
-fileInput.accept = 'video/*';
-fileInput.multiple = true;
-fileInput.onchange = (e) => {
-    const files = Array.from(e.target.files);
-    if (files.length > 0) {
-        addBtn.classList.add('hidden');
-        const transaction = db.transaction(["videos"], "readwrite");
-        const store = transaction.objectStore("videos");
-        files.forEach(file => {
-            store.add(file); // 保存到本地，下次打开还在
-            renderVideo(file);
-        });
-    }
+async function pickVideos() {
+    if (!window.Capacitor) return;
+    try {
+        const { FilePicker } = window.Capacitor.Plugins;
+        const result = await FilePicker.pickVideos({ multiple: true, readData: false });
+        if (result.files && result.files.length > 0) {
+            const transaction = db.transaction(["paths"], "readwrite");
+            const store = transaction.objectStore("paths");
+            result.files.forEach(file => {
+                if (file.path) {
+                    store.add(file.path);
+                    renderVideo(file.path);
+                }
+            });
+            addBtn.classList.add('hidden');
+        }
+    } catch (err) { console.error(err); }
+}
+
+addBtn.onclick = (e) => { e.stopPropagation(); pickVideos(); };
+
+container.onclick = () => {
+    addBtn.classList.toggle('hidden'); 
+    const centerY = window.innerHeight / 2;
+    document.querySelectorAll('.video-card').forEach(card => {
+        const rect = card.getBoundingClientRect();
+        if (rect.top <= centerY && rect.bottom >= centerY) {
+            const v = card.querySelector('video');
+            if (v) v.paused ? v.play() : v.pause();
+        }
+    });
 };
 
-addBtn.onclick = () => fileInput.click();
-
-// 5. 核心逻辑：监听滚动 + 自动控制按钮显隐
 const observer = new IntersectionObserver((entries) => {
     entries.forEach(entry => {
         const v = entry.target.querySelector('video');
         if (entry.isIntersecting) {
-            v.play().then(() => {
-                // 播放成功，隐藏按钮
-                addBtn.classList.add('hidden');
-            }).catch(() => {});
+            v.play().catch(() => {
+                v.muted = true;
+                v.play();
+            });
         } else {
             v.pause();
         }
     });
-}, { threshold: 0.7 });
-
-// 6. 核心逻辑：点击控制暂停/播放 + 状态同步
-container.onclick = () => {
-    const centerY = window.innerHeight / 2;
-    const cards = document.querySelectorAll('.video-card');
-    
-    cards.forEach(card => {
-        const rect = card.getBoundingClientRect();
-        if (rect.top <= centerY && rect.bottom >= centerY) {
-            const v = card.querySelector('video');
-            if (v.paused) {
-                v.play();
-                addBtn.classList.add('hidden'); // 播放时隐藏
-            } else {
-                v.pause();
-                addBtn.classList.remove('hidden'); // 暂停时显示
-            }
-        }
-    });
-};
+}, { threshold: 0.6 });
