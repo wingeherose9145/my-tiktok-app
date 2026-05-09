@@ -2,5 +2,7 @@
   "appId": "com.mytiktok.app",
   "appName": "MyTikTok",
   "webDir": "www",
-  "bundledWebRuntime": false
+  "server": {
+    "androidScheme": "https"
+  }
 }
