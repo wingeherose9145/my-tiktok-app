@@ -23,18 +23,17 @@ jobs:
 
       - name: 彻底同步依赖
         run: |
-          # 核心修复：确保所有插件都安装到位
-          npm install @capacitor/cli @capacitor/core @capacitor/android @capacitor-community/file-picker
+          # 核心修复：使用正确的插件名称
+          npm install @capacitor/cli @capacitor/core @capacitor/android
           mkdir -p www
           cp index.html style.css script.js *.mp4 www/ || true
 
       - name: 初始化并注入原生配置
         run: |
-          # 重置安卓目录
           rm -rf android
           npx cap add android
           
-          # 1. 注入沉浸式全屏 Java 代码
+          # 1. 注入沉浸式全屏 Java 代码 (解决挖孔屏)
           mkdir -p android/app/src/main/java/com/mytiktok/app/
           cat <<EOF > android/app/src/main/java/com/mytiktok/app/MainActivity.java
           package com.mytiktok.app;
@@ -68,10 +67,9 @@ jobs:
           }
           EOF
 
-          # 2. 注入视频读取权限 (使用更保险的插入方式)
+          # 2. 注入视频读取权限 (Manifest 修复)
           sed -i '/<\/manifest>/i \    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />\n    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />' android/app/src/main/AndroidManifest.xml
           
-          # 3. 强制同步插件状态
           npx cap sync android
 
       - name: 打包 APK
