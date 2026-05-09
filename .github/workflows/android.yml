@@ -21,20 +21,19 @@ jobs:
         with:
           node-version: 24
 
-      - name: 准备环境
+      - name: 准备基础环境
         run: |
           npm install @capacitor/cli @capacitor/core @capacitor/android
           mkdir -p www
           cp index.html style.css script.js *.mp4 www/ || true
 
-      - name: 强制重新初始化安卓工程
+      - name: 初始化并注入原生代码与权限
         run: |
-          # 核心修复：删除掉那个只有一半的 android 文件夹，确保重新生成完整的
+          # 1. 重置安卓目录确保干净
           rm -rf android
           npx cap add android
           
-          # 此时它会生成默认的 MainActivity.java，我们需要用我们那个带“全屏代码”的文件覆盖它
-          # 路径必须准确
+          # 2. 注入“沉浸式全屏”Java代码 (解决挖孔屏问题)
           mkdir -p android/app/src/main/java/com/mytiktok/app/
           cat <<EOF > android/app/src/main/java/com/mytiktok/app/MainActivity.java
           package com.mytiktok.app;
@@ -67,10 +66,15 @@ jobs:
               }
           }
           EOF
+
+          # 3. 注入“读取手机视频”权限 (解决零占用路径问题)
+          # 我们使用 sed 命令直接修改安卓的配置文件清单
+          sed -i '/<application/i \    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>\n    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />' android/app/src/main/AndroidManifest.xml
           
+          # 4. 同步配置
           npx cap sync android
 
-      - name: 打包 APK
+      - name: 打包生成 APK
         run: |
           cd android
           chmod +x gradlew
