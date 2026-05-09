@@ -1,18 +1,19 @@
 * { margin: 0; padding: 0; box-sizing: border-box; }
-body { background-color: #000; overflow: hidden; font-family: sans-serif; }
+body { background-color: #000; overflow: hidden; }
 
 .video-container {
     width: 100vw;
     height: 100vh;
     overflow-y: scroll;
     scroll-snap-type: y mandatory;
+    scrollbar-width: none; /* 隐藏滚动条 */
 }
+.video-container::-webkit-scrollbar { display: none; }
 
 .video-card {
     width: 100%;
     height: 100%;
     scroll-snap-align: start;
-    position: relative;
     background: #000;
     display: flex;
     align-items: center;
@@ -22,41 +23,28 @@ body { background-color: #000; overflow: hidden; font-family: sans-serif; }
 video {
     width: 100%;
     height: 100%;
-    /* 关键：contain 保证视频不被拉伸，显示完整画面 */
-    /* 如果你想要铺满全屏（裁切边角），可以改成 cover */
-    object-fit: contain; 
+    object-fit: contain; /* 保证比例，不拉伸 */
 }
 
-#empty-state {
-    color: #666;
-    height: 100%;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-}
-
-/* 悬浮按钮样式 */
 #add-btn {
     position: fixed;
     bottom: 30px;
     right: 30px;
-    width: 60px;
-    height: 60px;
-    background: #fe2c55; /* TikTok红 */
+    width: 55px;
+    height: 55px;
+    background: rgba(254, 44, 85, 0.8);
     border-radius: 50%;
     color: white;
-    font-size: 40px;
+    font-size: 32px;
     display: flex;
     justify-content: center;
     align-items: center;
-    box-shadow: 0 4px 10px rgba(0,0,0,0.5);
     z-index: 999;
+    transition: opacity 0.5s; /* 消失时的淡出效果 */
 }
 
-.info {
-    position: absolute;
-    bottom: 80px;
-    left: 20px;
-    color: white;
-    text-shadow: 1px 1px 2px #000;
+/* 隐藏状态 */
+.hidden {
+    opacity: 0 !important;
+    pointer-events: none;
 }
