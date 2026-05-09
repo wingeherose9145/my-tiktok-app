@@ -21,27 +21,62 @@ jobs:
         with:
           node-version: 24
 
-      - name: 准备 www 目录
+      - name: 准备环境
         run: |
-          # 核心修复：创建 www 文件夹并把所有网页资源搬进去
+          npm install @capacitor/cli @capacitor/core @capacitor/android
           mkdir -p www
           cp index.html style.css script.js *.mp4 www/ || true
-          # 安装打包工具
-          npm install @capacitor/cli @capacitor/core @capacitor/android
 
-      - name: 彻底初始化安卓项目
+      - name: 强制重新初始化安卓工程
         run: |
-          npx cap add android || true
-          # 这一步现在会将 www 文件夹同步到安卓工程
+          # 核心修复：删除掉那个只有一半的 android 文件夹，确保重新生成完整的
+          rm -rf android
+          npx cap add android
+          
+          # 此时它会生成默认的 MainActivity.java，我们需要用我们那个带“全屏代码”的文件覆盖它
+          # 路径必须准确
+          mkdir -p android/app/src/main/java/com/mytiktok/app/
+          cat <<EOF > android/app/src/main/java/com/mytiktok/app/MainActivity.java
+          package com.mytiktok.app;
+          import android.graphics.Color;
+          import android.os.Build;
+          import android.os.Bundle;
+          import android.view.View;
+          import android.view.Window;
+          import android.view.WindowManager;
+          import com.getcapacitor.BridgeActivity;
+
+          public class MainActivity extends BridgeActivity {
+              @Override
+              protected void onCreate(Bundle savedInstanceState) {
+                  super.onCreate(savedInstanceState);
+                  Window window = getWindow();
+                  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                      window.clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS);
+                      window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
+                      window.getDecorView().setSystemUiVisibility(
+                          View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                      );
+                      window.setStatusBarColor(Color.TRANSPARENT);
+                  }
+                  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                      WindowManager.LayoutParams lp = window.getAttributes();
+                      lp.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
+                      window.setAttributes(lp);
+                  }
+              }
+          }
+          EOF
+          
           npx cap sync android
 
-      - name: 授予权限并执行打包
+      - name: 打包 APK
         run: |
           cd android
           chmod +x gradlew
           ./gradlew assembleDebug
 
-      - name: 上传 APK 产物
+      - name: 上传 APK
         uses: actions/upload-artifact@v4
         with:
           name: my-tiktok-apk
