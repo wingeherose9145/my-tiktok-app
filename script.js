@@ -59,41 +59,37 @@ fileInput.onchange = (e) => {
 
 addBtn.onclick = () => fileInput.click();
 
-// 5. 滚动播放逻辑
+// 5. 核心逻辑：监听滚动 + 自动控制按钮显隐
 const observer = new IntersectionObserver((entries) => {
     entries.forEach(entry => {
         const v = entry.target.querySelector('video');
         if (entry.isIntersecting) {
-            v.muted = false;
-            v.play().catch(() => {});
+            v.play().then(() => {
+                // 播放成功，隐藏按钮
+                addBtn.classList.add('hidden');
+            }).catch(() => {});
         } else {
             v.pause();
         }
     });
 }, { threshold: 0.7 });
 
-
-// 6. 核心交互：精准锁定当前视频并控制播放
-container.onclick = (e) => {
-    // 逻辑：通过坐标判断哪个视频卡片正处于屏幕中心
+// 6. 核心逻辑：点击控制暂停/播放 + 状态同步
+container.onclick = () => {
     const centerY = window.innerHeight / 2;
     const cards = document.querySelectorAll('.video-card');
     
     cards.forEach(card => {
         const rect = card.getBoundingClientRect();
-        // 如果卡片的范围覆盖了屏幕中点，说明它是当前正在看的视频
         if (rect.top <= centerY && rect.bottom >= centerY) {
             const v = card.querySelector('video');
-            if (v) {
-                if (v.paused) {
-                    v.play();
-                } else {
-                    v.pause();
-                }
+            if (v.paused) {
+                v.play();
+                addBtn.classList.add('hidden'); // 播放时隐藏
+            } else {
+                v.pause();
+                addBtn.classList.remove('hidden'); // 暂停时显示
             }
         }
     });
-    
-    // 同时也切换按钮显隐
-    addBtn.classList.toggle('hidden');
 };
