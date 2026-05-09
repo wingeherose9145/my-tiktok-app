@@ -15,54 +15,66 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22' # 升级到 22 解决警告
 
-      - name: Build Web Assets
+      - name: Prepare Web
         run: |
           mkdir -p www
           cp index.html style.css script.js www/
           
-      - name: Capacitor Android Setup
+      - name: Capacitor Setup
         run: |
-          npm install --force @capacitor/cli @capacitor/core @capacitor/android @capawesome/capacitor-file-picker
+          npm install --force
           npx cap add android
           
-          # 直接覆盖 MainActivity.java，防止追加错误 (关键修改)
+          # 1. 注入 MainActivity.java (修复编译错误的精简版)
           mkdir -p android/app/src/main/java/com/mytiktok/app/
           cat <<'EOF' > android/app/src/main/java/com/mytiktok/app/MainActivity.java
           package com.mytiktok.app;
           import android.os.Bundle;
+          import android.graphics.Color;
+          import android.os.Build;
+          import android.view.View;
+          import android.view.Window;
           import com.getcapacitor.BridgeActivity;
-          import io.capawesome.capacitor.filepicker.FilePickerPlugin;
 
           public class MainActivity extends BridgeActivity {
               @Override
               protected void onCreate(Bundle savedInstanceState) {
-                  registerPlugin(FilePickerPlugin.class);
                   super.onCreate(savedInstanceState);
+                  // 沉浸式全屏逻辑
+                  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                      Window window = getWindow();
+                      window.getDecorView().setSystemUiVisibility(
+                          View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN | 
+                          View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                      );
+                      window.setStatusBarColor(Color.TRANSPARENT);
+                  }
               }
           }
           EOF
 
-          # 使用更安全的 python 脚本修改清单文件，避开 sed 的坑
+          # 2. 用 Python 注入权限，避开 sed 乱码问题
           python3 -c "
           import os
-          path = 'android/app/src/main/AndroidManifest.xml'
-          with open(path, 'r') as f: content = f.read()
+          p = 'android/app/src/main/AndroidManifest.xml'
+          with open(p, 'r') as f: c = f.read()
           perms = '\n    <uses-permission android:name=\"android.permission.READ_EXTERNAL_STORAGE\" />\n    <uses-permission android:name=\"android.permission.READ_MEDIA_VIDEO\" />\n'
-          content = content.replace('</manifest>', perms + '</manifest>')
-          with open(path, 'w') as f: f.write(content)
+          if '</manifest>' in c:
+              c = c.replace('</manifest>', perms + '</manifest>')
+          with open(p, 'w') as f: f.write(c)
           "
           
           npx cap sync android
 
-      - name: Build Debug APK
+      - name: Build APK
         run: |
           cd android && chmod +x gradlew
           ./gradlew assembleDebug
 
-      - name: Upload APK
+      - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: tiktok-fix-build
+          name: tiktok-final-fix
           path: android/app/build/outputs/apk/debug/app-debug.apk
