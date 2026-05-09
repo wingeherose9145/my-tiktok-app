@@ -2,7 +2,6 @@ const container = document.getElementById('videoContainer');
 const addBtn = document.getElementById('add-btn');
 let db;
 
-// 1. 数据库初始化
 const request = indexedDB.open("VideoPathDB", 1);
 request.onupgradeneeded = (e) => {
     db = e.target.result;
@@ -21,7 +20,6 @@ function loadSavedPaths() {
     store.getAll().onsuccess = (e) => {
         const paths = e.target.result;
         if (paths && paths.length > 0) {
-            // 初始有视频时隐藏按钮
             addBtn.classList.add('hidden');
             paths.forEach(path => renderVideo(path));
         }
@@ -32,12 +30,15 @@ function renderVideo(nativePath) {
     const videoUrl = window.Capacitor ? window.Capacitor.convertFileSrc(nativePath) : nativePath;
     const card = document.createElement('div');
     card.className = 'video-card';
-    card.innerHTML = `<video src="${videoUrl}" loop playsinline webkit-playsinline></video>`;
+    // 关键：增加 preload="auto"
+    card.innerHTML = `<video src="${videoUrl}" loop playsinline webkit-playsinline preload="auto"></video>`;
     container.appendChild(card);
+    
+    const v = card.querySelector('video');
+    v.load(); // 强制重新加载路径
     observer.observe(card);
 }
 
-// 2. 选择视频
 async function pickVideos() {
     if (!window.Capacitor) return;
     try {
@@ -59,10 +60,8 @@ async function pickVideos() {
 
 addBtn.onclick = (e) => { e.stopPropagation(); pickVideos(); };
 
-// 3. 点击屏幕任何地方：切换按钮显示/隐藏，并控制播放/暂停
 container.onclick = () => {
-    addBtn.classList.toggle('hidden'); // 随时找回添加按钮
-    
+    addBtn.classList.toggle('hidden'); 
     const centerY = window.innerHeight / 2;
     document.querySelectorAll('.video-card').forEach(card => {
         const rect = card.getBoundingClientRect();
@@ -73,13 +72,12 @@ container.onclick = () => {
     });
 };
 
-// 4. 滑动自动播放
 const observer = new IntersectionObserver((entries) => {
     entries.forEach(entry => {
         const v = entry.target.querySelector('video');
         if (entry.isIntersecting) {
             v.play().catch(() => {
-                v.muted = true; // 如果报错尝试静音播放
+                v.muted = true;
                 v.play();
             });
         } else {
