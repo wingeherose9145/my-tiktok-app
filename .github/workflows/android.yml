@@ -9,41 +9,39 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
-      - name: Clean and Prepare
+      - name: Prepare Assets
         run: |
-          rm -rf android www node_modules package-lock.json
+          rm -rf www
           mkdir -p www
           cp index.html style.css script.js www/ || true
-          
-      - name: Install and Init Native
+
+      - name: Install and Build Native
         run: |
           npm install --force @capacitor/cli @capacitor/core @capacitor/android @capawesome/capacitor-file-picker
           npx cap add android
-          
-          # 注入修复版的 MainActivity.java
+
+          # 1. 注入 MainActivity.java (最稳健的写法)
           mkdir -p android/app/src/main/java/com/mytiktok/app/
-          cat <<EOF > android/app/src/main/java/com/mytiktok/app/MainActivity.java
+          cat <<'EOF' > android/app/src/main/java/com/mytiktok/app/MainActivity.java
           package com.mytiktok.app;
-          import android.content.Intent;
-          import android.net.Uri;
-          import android.os.Build;
           import android.os.Bundle;
-          import android.os.Environment;
-          import android.provider.Settings;
+          import android.graphics.Color;
+          import android.os.Build;
           import android.view.View;
           import android.view.Window;
           import android.view.WindowManager;
-          import android.graphics.Color;
           import com.getcapacitor.BridgeActivity;
           import io.capawesome.capacitor.filepicker.FilePickerPlugin;
 
@@ -65,21 +63,13 @@ jobs:
                       lp.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
                       window.setAttributes(lp);
                   }
-
-                  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                      if (!Environment.isExternalStorageManager()) {
-                          Intent intent = new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION);
-                          intent.setData(Uri.parse("package:" + getPackageName()));
-                          startActivity(intent);
-                      }
-                  }
               }
           }
           EOF
 
-          # 修正权限注入语法
-          sed -i 's/<manifest/<manifest xmlns:tools="http:\/\/schemas.android.com\/tools"/' android/app/src/main/AndroidManifest.xml
-          sed -i '/<\/manifest>/i \    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />\n    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />\n    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" tools:ignore="ScopedStorage" />' android/app/src/main/AndroidManifest.xml
+          # 2. 注入权限 (使用最原始的 append 方式，防止匹配失败)
+          # 在 </manifest> 前面插入权限声明
+          sed -i '/<\/manifest>/i \    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />\n    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />' android/app/src/main/AndroidManifest.xml
           
           npx cap sync android
 
@@ -88,8 +78,9 @@ jobs:
           cd android
           chmod +x gradlew
           ./gradlew assembleDebug
-      - name: Upload
+
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: my-tiktok-final-apk
+          name: my-tiktok-zero-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
