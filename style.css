@@ -1,50 +1,51 @@
-* { margin: 0; padding: 0; box-sizing: border-box; }
-body { background-color: #000; overflow: hidden; }
-
-.video-container {
-    width: 100vw;
-    height: 100vh;
-    overflow-y: scroll;
-    scroll-snap-type: y mandatory;
-    scrollbar-width: none; /* 隐藏滚动条 */
-}
-.video-container::-webkit-scrollbar { display: none; }
-
-.video-card {
+html, body {
+    margin: 0;
+    padding: 0;
     width: 100%;
     height: 100%;
+    background-color: #000000 !important;
+    overflow: hidden;
+}
+
+#videoContainer {
+    width: 100vw;
+    height: 100vh;
+    scroll-snap-type: y mandatory;
+    overflow-y: scroll;
+    background-color: #000000;
+}
+
+.video-card {
+    width: 100vw;
+    height: 100vh;
     scroll-snap-align: start;
-    background: #000;
     display: flex;
     align-items: center;
     justify-content: center;
+    background-color: #000000;
 }
 
-video {
+.video-card video {
     width: 100%;
     height: 100%;
-    object-fit: contain; /* 保证比例，不拉伸 */
+    /* contain 保证视频比例正确且完整显示，不拉伸 */
+    object-fit: contain; 
+    display: block;
 }
 
 #add-btn {
     position: fixed;
     bottom: 30px;
-    right: 30px;
-    width: 55px;
-    height: 55px;
-    background: rgba(254, 44, 85, 0.8);
-    border-radius: 50%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(255, 255, 255, 0.3);
     color: white;
-    font-size: 32px;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    z-index: 999;
-    transition: opacity 0.5s; /* 消失时的淡出效果 */
+    padding: 10px 20px;
+    border-radius: 20px;
+    z-index: 100;
+    backdrop-filter: blur(5px);
 }
 
-/* 隐藏状态 */
-.hidden {
-    opacity: 0 !important;
-    pointer-events: none;
+#add-btn.hidden {
+    display: none;
 }
