@@ -2,7 +2,7 @@ const container = document.getElementById('videoContainer');
 const addBtn = document.getElementById('add-btn');
 let db;
 
-const request = indexedDB.open("VideoPathDB", 3); // 再次升级版本号以强制刷新
+const request = indexedDB.open("VideoPathDB", 4); // 再次升级版本，确保数据结构干净
 request.onupgradeneeded = (e) => {
     db = e.target.result;
     if (!db.objectStoreNames.contains("paths")) db.createObjectStore("paths", { autoIncrement: true });
@@ -14,76 +14,62 @@ function loadSavedPaths() {
     const store = transaction.objectStore("paths");
     store.getAll().onsuccess = (e) => {
         const paths = e.target.result;
-        container.innerHTML = ''; 
+        container.innerHTML = '';
         if (paths && paths.length > 0) {
             addBtn.classList.add('hidden');
-            // 延迟 500ms 加载，确保 WebView 容器完全就绪
-            setTimeout(() => {
-                paths.forEach(path => renderVideo(path));
-            }, 500);
+            // 解决“占位不播放”：增加一个显式的加载动作
+            paths.forEach(path => renderVideo(path));
         }
     };
 }
 
 function renderVideo(nativePath) {
-    // 强制转换路径，这是播放本地视频的唯一合法协议
-    let videoUrl = window.Capacitor ? window.Capacitor.convertFileSrc(nativePath) : nativePath;
-    
+    if (!nativePath) return;
+    const videoUrl = window.Capacitor ? window.Capacitor.convertFileSrc(nativePath) : nativePath;
     const card = document.createElement('div');
     card.className = 'video-card';
-    card.innerHTML = `
-        <video src="${videoUrl}" 
-               loop 
-               playsinline 
-               preload="auto"
-               webkit-playsinline 
-               style="width:100%; height:100%; object-fit:cover;">
-        </video>`;
-    
+    // 关键：增加 muted 和 playsinline，并在 JS 里强制 load()
+    card.innerHTML = `<video src="${videoUrl}" loop playsinline webkit-playsinline preload="auto"></video>`;
     container.appendChild(card);
+    
+    const v = card.querySelector('video');
+    v.load(); // 强制视频重新加载路径
     observer.observe(card);
 }
-
-// 交互：点击屏幕控制播放/暂停
-container.addEventListener('click', () => {
-    addBtn.classList.toggle('hidden');
-    const videos = document.querySelectorAll('video');
-    videos.forEach(v => {
-        const rect = v.getBoundingClientRect();
-        if (rect.top >= 0 && rect.top < window.innerHeight) {
-            if (v.paused) v.play().catch(e => console.log(e));
-            else v.pause();
-        }
-    });
-});
 
 async function pickVideos() {
     try {
         const { FilePicker } = window.Capacitor.Plugins;
+        // 解决“只能选一个”：强制 multiple 为 true
         const result = await FilePicker.pickVideos({ multiple: true, readData: false });
+        
         if (result.files && result.files.length > 0) {
             const transaction = db.transaction(["paths"], "readwrite");
             const store = transaction.objectStore("paths");
-            result.files.forEach(file => {
+            for (const file of result.files) {
                 if (file.path) {
                     store.add(file.path);
                     renderVideo(file.path);
                 }
-            });
+            }
             addBtn.classList.add('hidden');
         }
-    } catch (err) { alert("选取失败: " + err); }
+    } catch (err) { console.error("Pick error:", err); }
 }
 
 addBtn.onclick = (e) => { e.stopPropagation(); pickVideos(); };
+container.onclick = () => {
+    addBtn.classList.toggle('hidden');
+    // 点击强制播放当前中心视频
+    const v = document.elementFromPoint(window.innerWidth/2, window.innerHeight/2)?.closest('.video-card')?.querySelector('video');
+    if (v) v.paused ? v.play() : v.pause();
+};
 
 const observer = new IntersectionObserver((entries) => {
     entries.forEach(entry => {
         const v = entry.target.querySelector('video');
         if (v && entry.isIntersecting) {
             v.play().catch(() => { v.muted = true; v.play(); });
-        } else if (v) {
-            v.pause();
-        }
+        } else if (v) { v.pause(); }
     });
-}, { threshold: 0.5 });
+}, { threshold: 0.6 });
