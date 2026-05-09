@@ -72,23 +72,28 @@ const observer = new IntersectionObserver((entries) => {
     });
 }, { threshold: 0.7 });
 
-// 6. 核心交互：点击屏幕暂停/播放 + 切换按钮显隐
+
+// 6. 核心交互：精准锁定当前视频并控制播放
 container.onclick = (e) => {
-    // 找到当前正在显示的视频卡片
+    // 逻辑：通过坐标判断哪个视频卡片正处于屏幕中心
+    const centerY = window.innerHeight / 2;
     const cards = document.querySelectorAll('.video-card');
+    
     cards.forEach(card => {
         const rect = card.getBoundingClientRect();
-        // 检查哪个视频在屏幕中央
-        if (rect.top >= 0 && rect.top < window.innerHeight / 2) {
+        // 如果卡片的范围覆盖了屏幕中点，说明它是当前正在看的视频
+        if (rect.top <= centerY && rect.bottom >= centerY) {
             const v = card.querySelector('video');
-            if (v.paused) {
-                v.play();
-            } else {
-                v.pause();
+            if (v) {
+                if (v.paused) {
+                    v.play();
+                } else {
+                    v.pause();
+                }
             }
         }
     });
     
-    // 同时也切换按钮的显示隐藏，方便再次添加
+    // 同时也切换按钮显隐
     addBtn.classList.toggle('hidden');
 };
