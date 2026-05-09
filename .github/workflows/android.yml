@@ -4,7 +4,10 @@ on: [push, workflow_dispatch]
 jobs:
   build:
     runs-on: ubuntu-latest
-    # 强制指定环境使用 Node 20 以匹配 Actions 兼容性，消除警告
+    # 核心修复：设置环境变量以启用 Node.js 24，消除警告
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+      
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
@@ -18,24 +21,22 @@ jobs:
       - name: 安装 Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
 
       - name: 准备 www 目录
         run: |
-          # 核心修复：确保 webDir 文件夹存在
+          # 确保 Capacitor 要求的 webDir 存在
           mkdir -p www
           cp index.html style.css script.js www/ || true
-          # 如果你有本地视频文件，也考进去
           cp *.mp4 www/ || true
 
       - name: 彻底初始化安卓项目
         run: |
           npm install @capacitor/cli @capacitor/core @capacitor/android
-          # 删掉旧的，重新添加
           rm -rf android
           npx cap add android
           
-          # 注入全屏代码
+          # 1. 注入全屏 Java 代码 (解决挖孔屏问题)
           mkdir -p android/app/src/main/java/com/mytiktok/app/
           cat <<EOF > android/app/src/main/java/com/mytiktok/app/MainActivity.java
           package com.mytiktok.app;
@@ -69,12 +70,12 @@ jobs:
           }
           EOF
 
-          # 注入权限
+          # 2. 注入视频读取权限 (Manifest 修复)
           sed -i '/<\/manifest>/i \    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />\n    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />' android/app/src/main/AndroidManifest.xml
           
           npx cap sync android
 
-      - name: 授予权限并执行打包
+      - name: 执行打包
         run: |
           cd android
           chmod +x gradlew
