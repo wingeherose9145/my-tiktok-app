@@ -2,46 +2,40 @@ const container = document.getElementById('videoContainer');
 const addBtn = document.getElementById('add-btn');
 let db;
 
-// 1. 数据库初始化
-const request = indexedDB.open("VideoPathDB", 2); // 提升版本号以刷新存储
+const request = indexedDB.open("VideoPathDB", 3); // 再次升级版本号以强制刷新
 request.onupgradeneeded = (e) => {
     db = e.target.result;
-    if (!db.objectStoreNames.contains("paths")) {
-        db.createObjectStore("paths", { autoIncrement: true });
-    }
+    if (!db.objectStoreNames.contains("paths")) db.createObjectStore("paths", { autoIncrement: true });
 };
-request.onsuccess = (e) => {
-    db = e.target.result;
-    loadSavedPaths();
-};
+request.onsuccess = (e) => { db = e.target.result; loadSavedPaths(); };
 
 function loadSavedPaths() {
     const transaction = db.transaction(["paths"], "readonly");
     const store = transaction.objectStore("paths");
     store.getAll().onsuccess = (e) => {
         const paths = e.target.result;
-        container.innerHTML = ''; // 清空占位
+        container.innerHTML = ''; 
         if (paths && paths.length > 0) {
             addBtn.classList.add('hidden');
-            paths.forEach(path => renderVideo(path));
+            // 延迟 500ms 加载，确保 WebView 容器完全就绪
+            setTimeout(() => {
+                paths.forEach(path => renderVideo(path));
+            }, 500);
         }
     };
 }
 
 function renderVideo(nativePath) {
-    // 关键：针对 Capacitor 的路径转换逻辑
-    let videoUrl = nativePath;
-    if (window.Capacitor && window.Capacitor.convertFileSrc) {
-        videoUrl = window.Capacitor.convertFileSrc(nativePath);
-    }
-
+    // 强制转换路径，这是播放本地视频的唯一合法协议
+    let videoUrl = window.Capacitor ? window.Capacitor.convertFileSrc(nativePath) : nativePath;
+    
     const card = document.createElement('div');
     card.className = 'video-card';
-    // 增加 controls 以便在 JS 失效时应急，强制 style 确保填充
     card.innerHTML = `
         <video src="${videoUrl}" 
                loop 
                playsinline 
+               preload="auto"
                webkit-playsinline 
                style="width:100%; height:100%; object-fit:cover;">
         </video>`;
@@ -50,66 +44,46 @@ function renderVideo(nativePath) {
     observer.observe(card);
 }
 
-// 2. 选择视频
-async function pickVideos() {
-    try {
-        const { FilePicker } = window.Capacitor.Plugins;
-        const result = await FilePicker.pickVideos({ multiple: true, readData: false });
-        
-        if (result.files && result.files.length > 0) {
-            const transaction = db.transaction(["paths"], "readwrite");
-            const store = transaction.objectStore("paths");
-            
-            for (const file of result.files) {
-                if (file.path) {
-                    store.add(file.path);
-                    renderVideo(file.path);
-                }
-            }
-            addBtn.classList.add('hidden');
-        }
-    } catch (err) {
-        console.error("Pick error:", err);
-    }
-}
-
-addBtn.onclick = (e) => {
-    e.stopPropagation();
-    pickVideos();
-};
-
-// 3. 改进的交互逻辑：点击屏幕
-container.addEventListener('click', (e) => {
-    // 切换按钮显示
+// 交互：点击屏幕控制播放/暂停
+container.addEventListener('click', () => {
     addBtn.classList.toggle('hidden');
-    
-    // 获取当前中心点的视频
-    const centerY = window.innerHeight / 2;
-    const cards = document.querySelectorAll('.video-card');
-    cards.forEach(card => {
-        const rect = card.getBoundingClientRect();
-        if (rect.top < centerY && rect.bottom > centerY) {
-            const v = card.querySelector('video');
-            if (v) {
-                if (v.paused) v.play().catch(err => console.log("Play failed", err));
-                else v.pause();
-            }
+    const videos = document.querySelectorAll('video');
+    videos.forEach(v => {
+        const rect = v.getBoundingClientRect();
+        if (rect.top >= 0 && rect.top < window.innerHeight) {
+            if (v.paused) v.play().catch(e => console.log(e));
+            else v.pause();
         }
     });
 });
 
-// 4. 滚动自动播放
+async function pickVideos() {
+    try {
+        const { FilePicker } = window.Capacitor.Plugins;
+        const result = await FilePicker.pickVideos({ multiple: true, readData: false });
+        if (result.files && result.files.length > 0) {
+            const transaction = db.transaction(["paths"], "readwrite");
+            const store = transaction.objectStore("paths");
+            result.files.forEach(file => {
+                if (file.path) {
+                    store.add(file.path);
+                    renderVideo(file.path);
+                }
+            });
+            addBtn.classList.add('hidden');
+        }
+    } catch (err) { alert("选取失败: " + err); }
+}
+
+addBtn.onclick = (e) => { e.stopPropagation(); pickVideos(); };
+
 const observer = new IntersectionObserver((entries) => {
     entries.forEach(entry => {
         const v = entry.target.querySelector('video');
-        if (!v) return;
-        if (entry.isIntersecting) {
-            v.play().catch(() => {
-                v.muted = true; // 如果受限则静音播放
-                v.play();
-            });
-        } else {
+        if (v && entry.isIntersecting) {
+            v.play().catch(() => { v.muted = true; v.play(); });
+        } else if (v) {
             v.pause();
         }
     });
-}, { threshold: 0.6 });
+}, { threshold: 0.5 });
