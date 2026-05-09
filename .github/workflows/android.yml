@@ -29,32 +29,45 @@ jobs:
           npm install --force
           npx cap add android
           
-          # 使用 Python 精准注入 MainActivity.java，避免 cat 命令导致的文件损坏
+          # 使用 Python 精准注入增强型 MainActivity.java
           python3 -c "
           import os
           path = 'android/app/src/main/java/com/mytiktok/app/MainActivity.java'
           with open(path, 'r') as f: content = f.read()
           
-          # 1. 注入必要的库引用
+          # 1. 注入必要的 Android 类库引用
           imports = 'import android.os.Bundle;\nimport android.content.Intent;\nimport android.net.Uri;\nimport android.os.Build;\nimport android.os.Environment;\nimport android.provider.Settings;\nimport android.graphics.Color;\nimport android.view.View;\nimport android.view.WindowManager;'
           content = content.replace('import com.getcapacitor.BridgeActivity;', 'import com.getcapacitor.BridgeActivity;\n' + imports)
           
-          # 2. 注入精简版的 onCreate 逻辑（仅保留全屏、硬件加速和权限跳转）
+          # 2. 注入核心逻辑：权限持久化、硬件加速、强制 WebView 访问
           logic = '''
               @Override
               protected void onCreate(Bundle savedInstanceState) {
                   super.onCreate(savedInstanceState);
                   
-                  // 开启硬件加速防止视频黑屏
+                  // A. 开启硬件加速，解决重启后视频黑屏或首帧卡死
                   getWindow().addFlags(WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED);
                   
-                  // 沉浸式全屏逻辑
+                  // B. 沉浸式全屏设置
                   if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                      getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN | View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
+                      getWindow().getDecorView().setSystemUiVisibility(
+                          View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                      );
                       getWindow().setStatusBarColor(Color.TRANSPARENT);
                   }
 
-                  // 自动跳转权限设置页 (Android 11+)
+                  // C. 核心修复：强制开启 WebView 的本地文件和跨域访问权限
+                  // 即使系统重启，这也能确保 WebView 允许读取 _capacitor_file_ 协议
+                  try {
+                      this.bridge.getWebView().getSettings().setAllowFileAccess(true);
+                      this.bridge.getWebView().getSettings().setAllowContentAccess(true);
+                      this.bridge.getWebView().getSettings().setAllowFileAccessFromFileURLs(true);
+                      this.bridge.getWebView().getSettings().setAllowUniversalAccessFromFileURLs(true);
+                  } catch (Exception e) {
+                      e.printStackTrace();
+                  }
+
+                  // D. 自动跳转权限设置页 (针对 Android 11+)
                   if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                       if (!Environment.isExternalStorageManager()) {
                           Intent intent = new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION);
@@ -64,20 +77,20 @@ jobs:
                   }
               }
           '''
-          # 替换空的类定义为带有逻辑的类定义
+          # 替换空的类定义为带有增强逻辑的代码块
           content = content.replace('public class MainActivity extends BridgeActivity {}', 'public class MainActivity extends BridgeActivity {' + logic + '}')
           
           with open(path, 'w') as f: f.write(content)
           "
 
-          # 3. 注入 AndroidManifest 权限声明
+          # 3. 注入 AndroidManifest 权限声明和命名空间
           python3 -c "
           import os
           p = 'android/app/src/main/AndroidManifest.xml'
           with open(p, 'r') as f: c = f.read()
           if 'xmlns:tools' not in c:
               c = c.replace('<manifest', '<manifest xmlns:tools=\"http://schemas.android.com/tools\"')
-          perms = '\n    <uses-permission android:name=\"android.permission.READ_EXTERNAL_STORAGE\" />\n    <uses-permission android:name=\"android.permission.MANAGE_EXTERNAL_STORAGE\" tools:ignore=\"ScopedStorage\" />\n'
+          perms = '\\n    <uses-permission android:name=\"android.permission.READ_EXTERNAL_STORAGE\" />\\n    <uses-permission android:name=\"android.permission.MANAGE_EXTERNAL_STORAGE\" tools:ignore=\"ScopedStorage\" />\\n'
           c = c.replace('</manifest>', perms + '</manifest>')
           with open(p, 'w') as f: f.write(c)
           "
@@ -93,5 +106,5 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: MyTikTok-V81-Stable
+          name: MyTikTok-Final-Fixed
           path: android/app/build/outputs/apk/debug/app-debug.apk
