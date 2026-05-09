@@ -21,19 +21,20 @@ jobs:
         with:
           node-version: 24
 
-      - name: 准备基础环境
+      - name: 彻底同步依赖
         run: |
-          npm install @capacitor/cli @capacitor/core @capacitor/android
+          # 核心修复：确保所有插件都安装到位
+          npm install @capacitor/cli @capacitor/core @capacitor/android @capacitor-community/file-picker
           mkdir -p www
           cp index.html style.css script.js *.mp4 www/ || true
 
-      - name: 初始化并注入原生代码与权限
+      - name: 初始化并注入原生配置
         run: |
-          # 1. 重置安卓目录确保干净
+          # 重置安卓目录
           rm -rf android
           npx cap add android
           
-          # 2. 注入“沉浸式全屏”Java代码 (解决挖孔屏问题)
+          # 1. 注入沉浸式全屏 Java 代码
           mkdir -p android/app/src/main/java/com/mytiktok/app/
           cat <<EOF > android/app/src/main/java/com/mytiktok/app/MainActivity.java
           package com.mytiktok.app;
@@ -67,14 +68,13 @@ jobs:
           }
           EOF
 
-          # 3. 注入“读取手机视频”权限 (解决零占用路径问题)
-          # 我们使用 sed 命令直接修改安卓的配置文件清单
-          sed -i '/<application/i \    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>\n    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />' android/app/src/main/AndroidManifest.xml
+          # 2. 注入视频读取权限 (使用更保险的插入方式)
+          sed -i '/<\/manifest>/i \    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />\n    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />' android/app/src/main/AndroidManifest.xml
           
-          # 4. 同步配置
+          # 3. 强制同步插件状态
           npx cap sync android
 
-      - name: 打包生成 APK
+      - name: 打包 APK
         run: |
           cd android
           chmod +x gradlew
